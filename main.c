@@ -32,7 +32,11 @@
 typedef struct _RESOLUTIONS {
     unsigned int width;
     unsigned int height;
-    unsigned int flag;
+    unsigned int flags;
+
+    // flag is really a union:
+    // - lowest bit is passed to bios_set_clock_speed()
+
 } RESOLUTIONS, *PRESOLUTIONS;
 
 // global array at 0x060057a4
@@ -61,9 +65,9 @@ RESOLUTIONS g_Resolutions[] = {
     { 704, 448, 0x000000c3, },
     { 704, 480, 0x000000d3, },
     { 704, 512, 0x000000e3, },
-    { 320, 480, 0x00000004, },
-    { 640, 480, 0x00000006, },
-    { 352, 480, 0x00000005, },
+    { 320, 480, 0x00000004, }, // SDTV
+    { 640, 480, 0x00000006, }, // EDTV (VGA), progressive SCAN
+    { 352, 480, 0x00000005, }, // NULL??
     { 704, 480, 0x00000007, },
     { 0xffffffff, 0xffffffff, 0xffffffff, } // end marker
 };
@@ -74,12 +78,23 @@ void *memset(void *s, int c, unsigned int n);
 
 volatile unsigned short* VDP2_D0R = (unsigned short*)0x25F80000;
 volatile unsigned short* VDP2_D0W = (unsigned short*)0x25F80004;
-volatile unsigned short* VDP2_D1C = (unsigned short*)0x25f80028;
 volatile unsigned short* VDP2_D1R = (unsigned short*)0x25f80020;
+volatile unsigned short* VDP2_D1C = (unsigned short*)0x25f80028;
+volatile unsigned short* VDP2_D1AD = (unsigned short*)0x25f8002C;
+
+volatile unsigned short* VDP2_D1EN = (unsigned short*)0x25f80030;
+volatile unsigned short* VDP2_D1MD = (unsigned short*)0x25f80034;
+volatile unsigned short* VDP2_D2R = (unsigned short*)0x25f80040;
+volatile unsigned short* VDP2_D2W = (unsigned short*)0x25f80044;
+volatile unsigned short* VDP2_D2C = (unsigned short*)0x25f80048;
+volatile unsigned short* VDP2_D2AD = (unsigned short*)0x25f8004C;
+
+volatile unsigned short* VDP2_D2EN = (unsigned short*)0x25f80050;
+volatile unsigned short* VDP2_D2MD = (unsigned short*)0x25f80054;
+volatile unsigned short* VDP2_DSTP = (unsigned short*)0x25f80060;
 
 volatile unsigned short* VDP2_PPAF = (unsigned short*)0x25f80080;
 volatile unsigned short* VDP2_PPD = (unsigned short*)0x25f80084;
-
 
 
 #define VDP2_VRAM_START 0x25e00000
@@ -104,7 +119,7 @@ void initVDP2()
     *VDP2_D1C = 0x1e;
 
     // BUGBUG what's this VDP2 reg?
-        *(unsigned short*)0x25f80070 = 0;
+    *(unsigned short*)0x25f80070 = 0;
     *(unsigned short*)0x25f80072 = 0;
     *(unsigned short*)0x25f80074 = 0;
 
@@ -176,13 +191,10 @@ void initVDP1()
 
     initVDP1VRAMCache();
     setSomethingVDP1VRAMCache();
-
-
 }
 
 #define VDP1_VRAM_START 0x25c00000
 #define VDP1_VRAM_SIZE  0x20
-
 
 unsigned short g_VDP1_Global = 0;
 unsigned int g_currentIndex = 0;
@@ -379,10 +391,10 @@ void readSMPC(unsigned int unused, unsigned short* outData)
 
     }
 
-    val5 = (*SMPC_PDR1 & 0xF) |
+    val5 = ((*SMPC_PDR1 & 0xF) |
             (val3 & 0xf) << 4 |
             (val2 & 0xf) << 8 |
-            ((val1 & 0x8 << 0xc)) ^ 0x8FFF;
+            ((val1 & 0x8 << 0xc))) ^ 0x8FFF;
 
     val4 = *outData;
 
@@ -393,17 +405,398 @@ void readSMPC(unsigned int unused, unsigned short* outData)
     return;
 }
 
-void printMenu(int param_1)
+// function 0x6004100
+unsigned int writeTOVDP2VRAM(int x, int y, unsigned flags)
 {
+    unsigned int temp1;
+    unsigned int temp2;
+
+
+    unsigned char* vramByte = (unsigned char*)VDP2_VRAM_START + (x >> 1 | y * 0x200);
+
+    if((x & 1) != 0)
+    {
+        temp1 = (int)((char)(*vramByte & 0xf0) | (flags & 0xf));
+        *vramByte = (unsigned char)temp1;
+        return temp1;
+    }
+
+    temp2 = ((flags & 0xff)) << 4 & 0xf0;
+    temp1 = (int)((char)(*vramByte & 0xf));
+    *vramByte = (unsigned char)temp1 | (unsigned char)temp2;
+
+    return temp1 | temp2;
+}
+
+void printfWrapper5(int x, int y, int count, unsigned int flags)
+{
+    // BUGBUG: not impl
+    return;
 
 }
 
+// function 0x60041a0
+void printfWrapper6(int x, int y, int count, unsigned int flags)
+{
+    int i = 0;
+
+    if (count <= x) {
+        return;
+    }
+
+    do {
+        i = x + 1;
+        writeTOVDP2VRAM(x, y, flags & 0xff);
+        x = i;
+    } while (i != count);
+
+    return;
+}
+
+
+volatile unsigned int* VDP2_D0EN = (void*)0x25f80010;
+volatile unsigned int* VDP2_D0MD = (void*)0x25f80014;
+volatile unsigned short* VDP2_AREF = (void*)0x25f800b8;
+volatile unsigned short* VDP2_T0C = (void*)0x25f80090;
+volatile unsigned short* VDP2_T1S = (void*)0x25f80094;
+volatile unsigned int* VDP2_IST = (void*)0x25f800a4;
+volatile unsigned int* VDP2_AIACK = (void*)0x25f800a8;
+volatile unsigned short* VDP2_T1MD = (void*)0x25f80098;
+volatile unsigned short* VDP2_DSTA = (void*)0x25f8007C;
+volatile unsigned short* VDP2_PDA = (void*)0x25f80088;
+volatile unsigned int* VDP2_IMS = (void*)0x25f800A0;
+volatile unsigned short* VDP2_ASR0 = (void*)0x25f800b0;
+volatile unsigned short* VDP2_ASR1 = (void*)0x25f800b4;
+volatile unsigned short* VDP2_D1W = (void*)0x25f80024;
+
+// function 0x060041f0
+void setVDP2Registers(int param_1)
+    {
+    RESOLUTIONS* currRes = &g_Resolutions[param_1];
+
+    *VDP2_D0R = 0;
+    *VDP2_D1R = 0;
+
+    // BUGBUG: what's this registers
+    *(volatile unsigned short*)0x25f8000e = 0;
+
+    *VDP2_D0EN = 0xEEEEEEEE;
+    *VDP2_D0MD = 0xEEEEEEEE;
+    *(volatile unsigned int*)0x25f80018 = 0xEEEEEEEE;
+    *(volatile unsigned int*)0x25f8001C = 0xEEEEEEEE;
+
+
+    // BUGBUG: why is this size double??
+    // Is it wrong here or earlier??
+    memset((void*)VDP2_VRAM_START, 0, 512*1024);
+
+    int tempHeight = currRes->height;
+
+    // BUGBUG: how can this be negative?? all heights are positive except for the sentinel -1
+    // which never should get here
+    if(tempHeight < 0)
+    {
+        tempHeight += 0xf;
+    }
+
+    // BUGBUG: how can this be negative??
+    if((tempHeight >> 4) < 1)
+    {
+        tempHeight = currRes->width;
+    }
+    else
+    {
+        int j = 0;
+        int k = 0;
+
+        do{
+
+            printfWrapper6(0, k, currRes->width - 1, 7);
+            tempHeight = currRes->height;
+
+            j = j + 1;
+            k = k + 0x10;
+
+            if(tempHeight < 0)
+            {
+                tempHeight += 0xf;
+            }
+        }while(j < (int)tempHeight >> 4);
+
+        tempHeight = currRes->width;
+    }
+
+    if(tempHeight < 0)
+    {
+        tempHeight += 0xf;
+    }
+
+    if(0 < (tempHeight >> 4))
+    {
+        int j = 0;
+        while(true)
+        {
+            printfWrapper5(j << 4, 0, currRes->height - 1, 7);
+            int tempWidth = currRes->width;
+
+            j++;
+
+            if(tempWidth < 0)
+            {
+                tempWidth += 0xf;
+            }
+
+            if((tempWidth >> 4) <= j)
+            {
+                break;
+            }
+        }
+
+        tempHeight = currRes->height;
+    }
+
+    printfWrapper5(0, 0, currRes->height, 0xf);
+    printfWrapper5(currRes->width - 1, 0, currRes->height, 0xf);
+    printfWrapper6(0, 0, currRes->width, 0xf);
+    printfWrapper6(0, currRes->height -1, currRes->width, 0xf);
+
+    *VDP2_D1R = 1;
+    *(volatile unsigned short*)0x25f8000e = 0;
+    *VDP2_D0EN = 0x45454545;
+    *VDP2_D0MD = 0x45454545;
+    *(volatile unsigned int*)0x25f80018 = 0xEEEEEEEE;
+    *(volatile unsigned int*)0x25f8001C = 0xEEEEEEEE;
+    *VDP2_D1C = 0x0e0e;
+
+    *(volatile unsigned short*)0x25f8002a = 0;
+    *VDP2_D1EN = 0;
+    *(volatile unsigned short*)0x25f80032 = 0;
+    *VDP2_D1MD = 0;
+    *(volatile unsigned short*)0x25f80036 = 0;
+    *(volatile unsigned short*)0x25f8003a = 0;
+    *(volatile unsigned short*)0x25f8003c = 0;
+    *(volatile unsigned short*)0x25f8003e = 0;
+    *VDP2_D2R = 0;
+    *(volatile unsigned short*)0x25f80042 = 0;
+    *VDP2_D2W = 0;
+    *(volatile unsigned short*)0x25f80046 = 0;
+    *VDP2_D2C = 0;
+    *(volatile unsigned short*)0x25f8004a = 0;
+    *VDP2_D2AD = 0;
+    *(volatile unsigned short*)0x25f8004e = 0;
+    *VDP2_DSTP = 0;
+    *(volatile unsigned short*)0x25f80062 = 0;
+    *(volatile unsigned short*)0x25f80064 = 0;
+    *(volatile unsigned short*)0x25f80066 = 0;
+    *(volatile unsigned short*)0x25f80068 = 0;
+    *(volatile unsigned short*)0x25f8006a = 0;
+    *(volatile unsigned short*)0x25f8006c = 0;
+    *(volatile unsigned short*)0x25f8006e = 0;
+    *VDP2_D2EN = 0;
+    *(volatile unsigned short*)0x25f80052 = 0;
+    *VDP2_D2MD = 0;
+    *(volatile unsigned short*)0x25f80056 = 0;
+    *(volatile unsigned short*)0x25f80058 = 0;
+    *(volatile unsigned short*)0x25f8005a = 0;
+    *(volatile unsigned short*)0x25f8005c = 0;
+    *(volatile unsigned short*)0x25f8005e = 0;
+    *VDP2_D1AD = 0;
+    *(volatile unsigned short*)0x25f8002e = 0;
+
+    *VDP2_AREF = 0;
+    *(volatile unsigned short*)0x25f8002e = 0;
+    *(volatile unsigned short*)0x25f80022 = 0;
+
+    *(volatile unsigned short*)0x25f80070 = 0;
+    *(volatile unsigned short*)0x25f80072 = 0;
+    *(volatile unsigned short*)0x25f80074 = 0;
+
+    *(volatile unsigned short*)0x25f80076 = 0;
+    *VDP2_PPAF = 0;
+    *(volatile unsigned short*)0x25f80082 = 0;
+    *VDP2_PPD = 0;
+    *(volatile unsigned short*)0x25f80086 = 0;
+    *VDP2_T0C = 0;
+    *(volatile unsigned short*)0x25f80092 = 0;
+    *VDP2_T1S = 0;
+    *(volatile unsigned short*)0x25f80096 = 0;
+    *VDP2_T1MD = 0x0101;
+    *(volatile unsigned short*)0x25f80078 = 1;
+    *(volatile unsigned short*)0x25f8007a = 0;
+    *VDP2_DSTA = 1;
+    *(volatile unsigned short*)0x25f8007e = 0;
+    *VDP2_PDA = 1;
+    *(volatile unsigned short*)0x25f8008a = 0;
+    *VDP2_PPD = 1;
+    *(volatile unsigned short*)0x25f8008e = 0;
+    *(volatile unsigned short*)0x25f8009a = 0;
+
+    *(volatile unsigned int*)0x25f8009c = 0;
+    *VDP2_IMS = 0; // BUGBUG: unsigned int
+    *VDP2_IST = 0;// BUGBUG: unsigned int
+    *(volatile unsigned int*)0x25f800bc = 0;
+    *(volatile unsigned int*)0x25f800ac = 0;
+    *VDP2_AIACK = 0; // BUGBUG: unsigned int
+    *(volatile unsigned int*)0x25f800d8 = 0; // BUGBUG why is this done twice??
+    *(volatile unsigned int*)0x25f800d8 = 0;
+    *VDP2_IMS = 0; // BUGBUG: unsigned int
+
+    *VDP2_IST = 0; // BUGBUG: unsigned int
+    *(volatile unsigned int*)0x25f8009c = 0;
+    *(volatile unsigned int*)0x25f800bc = 0;
+    *VDP2_AIACK = 0; // BUGBUG: unsigned int
+    *(volatile unsigned int*)0x25f800ac = 0;
+    *(volatile unsigned int*)0x25f800d8 = 0;
+    *(volatile unsigned int*)0x25f800dc = 0;
+
+    *(volatile unsigned short*)0x25f800b2 = 0;
+    *VDP2_ASR0 = 0;
+    *VDP2_ASR1 = 0;
+    *(volatile unsigned short*)0x25f800b6 = 0;
+    *(volatile unsigned short*)0x25f800c0 = 0;
+    *(volatile unsigned short*)0x25f800c2 = 0;
+    *(volatile unsigned short*)0x25f800c4 = 0;
+    *(volatile unsigned short*)0x25f800c6 = 0;
+    *(volatile unsigned short*)0x25f800c8 = 0;
+    *(volatile unsigned short*)0x25f800ca = 0;
+    *(volatile unsigned short*)0x25f800cc = 0;
+    *(volatile unsigned short*)0x25f800ce = 0;
+    *(volatile unsigned short*)0x25f800d0 = 0;
+    *(volatile unsigned short*)0x25f800d2 = 0;
+    *(volatile unsigned short*)0x25f800d4 = 0;
+    *(volatile unsigned short*)0x25f800d6 = 0;
+    *(volatile unsigned short*)0x25f800e0 = 0;
+
+    *(volatile unsigned short*)0x25f800f0 = 0x0101;
+    *(volatile unsigned short*)0x25f800f2 = 0x0101;
+    *(volatile unsigned short*)0x25f800f4 = 0x0101;
+    *(volatile unsigned short*)0x25f800f6 = 0x0101;
+
+    *(volatile unsigned short*)0x25f80100 = 0;
+    *(volatile unsigned short*)0x25f80102 = 0;
+    *(volatile unsigned short*)0x25f80104 = 0;
+    *(volatile unsigned short*)0x25f80106 = 0;
+    *(volatile unsigned short*)0x25f800e4 = 0;
+    *(volatile unsigned short*)0x25f800e6 = 0;
+
+    *VDP2_D1W = 0;
+    *(volatile unsigned short*)0x25f80026 = 0;
+    *(volatile unsigned short*)0x25f800f8 = 0x0707;
+
+    *(volatile unsigned short*)0x25f800fa = 0;
+    *(volatile unsigned short*)0x25f800fc = 0;
+    *(volatile unsigned short*)0x25f800ea = 0;
+    *(volatile unsigned short*)0x25f800e8 = 0;
+    *(volatile unsigned short*)0x25f800ec = 0;
+    *(volatile unsigned short*)0x25f80108 = 0;
+    *(volatile unsigned short*)0x25f8010a = 0;
+    *(volatile unsigned short*)0x25f8010c = 0;
+    *(volatile unsigned short*)0x25f8010e = 0;
+    *(volatile unsigned short*)0x25f800ee = 0;
+    *(volatile unsigned short*)0x25f80110 = 0;
+    *(volatile unsigned short*)0x25f80112 = 0;
+    *(volatile unsigned short*)0x25f80114 = 0;
+    *(volatile unsigned short*)0x25f80116 = 0;
+    *(volatile unsigned short*)0x25f80118 = 0;
+    *(volatile unsigned short*)0x25f8011a = 0;
+    *(volatile unsigned short*)0x25f8011c = 0;
+    *(volatile unsigned short*)0x25f8011e = 0;
+    *(volatile unsigned short*)0x25f800e2 = 0;
+
+
+    // 480p special case
+    if(currRes->flags - 6 < 2)
+    {
+        *VDP2_D1R = 3;
+        *(volatile unsigned short*)0x25f80078 = 2;
+        *(volatile unsigned short*)0x25f8007a = 0;
+        *VDP2_PDA = 2;
+        *(volatile unsigned short*)0x25f8008a = 0;
+        *(volatile unsigned short*)0x25f80070 = 0;
+        *(volatile unsigned short*)0x25f80072 = 0;
+        *VDP2_PPAF = 1;
+        *(volatile unsigned short*)0x25f80082 = 0;
+        *VDP2_PPD = 0;
+        *(volatile unsigned short*)0x25f80086 = 0;
+    }
+
+    // write data to VDP2 CRAM Cache
+    // BUGBUG: this was done inlined, but reusing a fucntion I already had
+    copyDataToVDP2CRAMCache();
+
+
+
+}
+
+
+// bios_set_clock_speed is at 0x320
+typedef void (*bios_set_clock_speed_FP)(unsigned int);
+bios_set_clock_speed_FP bios_set_clock_speed = (bios_set_clock_speed_FP)(0x320);
+
+// function 0x060046b0
+void printMenu(int param_1)
+{
+    RESOLUTIONS* currRes = &g_Resolutions[param_1];
+
+    bios_set_clock_speed(currRes->flags & 1);
+
+    *VDP2_D0R = 0x8000;
+
+    pollVDP2_D0W_8_2();
+    pollVDP2_D0W_4();
+
+    setVDP2Registers(param_1);
+
+    int flags = currRes->flags;
+
+    int someField = (flags >> 6) & 3;
+
+    printfWrapper(2, 2, 0x00f0, "---x---");
+
+    int someField2 = (flags & 7) * 4;
+
+    // print width of the string
+    printfWrapper(2, 2, 0x00f0, "320"); // BUGBUG: this is an index into something that prints out the widths
+
+    // 480p resolutions
+    if((flags & 0x4) != 0)
+    {
+        printfWrapper(6, 2, 0x00f0, "480");
+        printfWrapper(2, 3, 0x00f0, "non-interlaced"); // BUGBUG: this is an index into something that prints out
+
+        printfWrapper(2, 4, 0x00f0, "SDTV"); // BUGBUG: this is an index into SDTV, EDTV, Hi-Vision
+        printfWrapper(2, 4, 0x00f0, "Press C for the next mode.");
+
+        *VDP2_D0R = 0x8000;
+        pollVDP2_D0W_8_2();
+        pollVDP2_D0W_4();
+
+        *VDP2_D0R = (unsigned short)(currRes->flags | 0x8000);
+        return;
+    }
+    else // non-480 p resolutions
+    {
+        printfWrapper(6, 2, 0x00f0, "240"); // BUGBUG: this is an index into a list of resolution strings
+        printfWrapper(2, 3, 0x00f0, "non-interlaced"); // BUGBUG: this is an index into something that prints out
+        printfWrapper(2, 4, 0x00f0, "SDTV"); // BUGBUG: this is an index into SDTV, EDTV, Hi-Vision
+        printfWrapper(2, 4, 0x00f0, "Press C for the next mode.");
+
+        *VDP2_D0R = 0x8000;
+        pollVDP2_D0W_8_2();
+        pollVDP2_D0W_4();
+
+        *VDP2_D0R = (unsigned short)(currRes->flags | 0x8000);
+        return;
+    }
+
+    return;
+}
 
 void jo_main(void)
 {
     unsigned short smpcData[3];
 
-    jo_core_init(JO_COLOR_Black);
+    //jo_core_init(JO_COLOR_Black);
     /*
 
     jo_core_add_callback(my_draw);
@@ -423,8 +816,7 @@ void jo_main(void)
 
     g_currentIndex = 0;
 
-    // printMenu()
-
+    printMenu(g_currentIndex);
 
     pollVDP2_D0W_8();
     pollVDP2_D0W_8_2();
@@ -444,6 +836,8 @@ void jo_main(void)
         *VDP2_PPAF = someVar;
         *VDP2_PPD = someVar2;
 
+        printMenu(0);
+
         initVDP1VRAMCache();
         setVDP1VRAM(0xA0, 0x70);
         setVDP1VRAM_2(0, 0, 0xA0, 0x70);
@@ -462,8 +856,4 @@ void jo_main(void)
         readSMPC(0, smpcData);
 
     }
-
-
-
-
 }
