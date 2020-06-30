@@ -98,9 +98,9 @@ volatile unsigned short* VDP2_PPD = (unsigned short*)0x25f80084;
 
 
 #define VDP2_VRAM_START 0x25e00000
-#define VDP2_VRAM_SIZE  0x40000
+#define VDP2_VRAM_SIZE  0x80000
 #define VDP2_CRAM_START 0x25f00000
-#define VDP2_CRAM_SIZE  0x800
+#define VDP2_CRAM_SIZE  0x1000
 
 // function 0x06004dd0
 void initVDP2()
@@ -140,8 +140,8 @@ void copyDataToVDP2CRAMCache()
     // BUGBUG:
     // set a pointer in the start of CRAM???
     // this decompilation doesn't make much sense
-    *(unsigned short*)VDP2_CRAM_START = *(unsigned short*)(CRAM_DATA + 1);
-    *(unsigned short*)(VDP2_CRAM_START + 1) = 0x4000;
+    *(volatile unsigned short*)VDP2_CRAM_START = *(unsigned short*)(CRAM_DATA + 2);
+    *(volatile unsigned short*)(VDP2_CRAM_START + 2) = 0x4000;
 }
 
 volatile unsigned char* SMPC_DDR1 = (void*)0x20100079;
@@ -156,8 +156,6 @@ void initSMPC()
     *SMPC_DDR2 = 0x60;
     *SMPC_IOSEL1 = 3;
     *SMPC_EXLE1 = 0;
-
-
     return;
 }
 
@@ -177,10 +175,10 @@ void initVDP1()
     unsigned short pattern = 0x0101;
 
     // BUGBUG: what are these registers
-    *(unsigned short*)0x25f80070 = pattern;
-    *(unsigned short*)0x25f80072 = pattern;
-    *(unsigned short*)0x25f80074 = pattern;
-    *(unsigned short*)0x25f80076 = pattern;
+    *(volatile unsigned short*)0x25f800f0 = pattern;
+    *(volatile unsigned short*)0x25f800f2 = pattern;
+    *(volatile unsigned short*)0x25f800f4 = pattern;
+    *(volatile unsigned short*)0x25f800f6 = pattern;
 
     *VDP1_TVMR = 0;
     *VDP1_FBCR = 0;
@@ -194,7 +192,7 @@ void initVDP1()
 }
 
 #define VDP1_VRAM_START 0x25c00000
-#define VDP1_VRAM_SIZE  0x20
+#define VDP1_VRAM_SIZE  0x40
 
 unsigned short g_VDP1_Global = 0;
 unsigned int g_currentIndex = 0;
@@ -223,6 +221,79 @@ void my_draw(void)
     jo_printf(2, 2, "hello world");
 }
 
+// function 0x6004100
+unsigned int writeToVDP2VRAM(int x, int y, unsigned flags)
+{
+    unsigned int temp1;
+    unsigned int temp2;
+
+
+    unsigned char* vramByte = (unsigned char*)VDP2_VRAM_START + (x >> 1 | y * 0x200);
+
+    if((x & 1) != 0)
+    {
+        temp1 = (int)((char)(*vramByte & 0xf0) | (flags & 0xf));
+        *vramByte = (unsigned char)temp1;
+        return temp1;
+    }
+
+    temp2 = ((flags & 0xff)) << 4 & 0xf0;
+    temp1 = (int)((char)(*vramByte & 0xf));
+    *vramByte = (unsigned char)temp1 | (unsigned char)temp2;
+
+    return temp1 | temp2;
+}
+
+int someShifter(int x, int y)
+{
+    return x | y;
+}
+
+
+// function 06004fb0
+void printfWrapper2(int x,int y, unsigned int flag, char *msg)
+{
+    unsigned int i = 0;
+    int j = 0;
+    
+    int tempX = 0;
+    int tempY = 0;
+    
+    unsigned int retVal = 0;
+    
+    do{
+    
+        j = 0;
+        char cVar1 = 0x41; // BUGBUG: read this from VDP2???
+        tempY = (y * 8) + i;
+        
+        do {
+            while(retVal = someShifter(0x0080, j), (retVal & (int)cVar1  & 0xFFU) == 0) {
+                tempX = j + (x*8);
+                
+                j = j + 1;
+                
+                writeToVDP2VRAM(tempX, tempY, flag & 0x0f);
+                
+                if(j == 8)
+                    goto LOOP_EXIT;  
+            }
+            
+            tempX = j + (x * 8);
+            j = j + 1;
+            writeToVDP2VRAM(tempX, tempY, (flag & 0xff) >> 4);
+            
+        }while(j != 8);
+
+    LOOP_EXIT:
+        i = i + 1;
+        if(i == 8) {    
+            return;        
+        }
+    
+    }while(true);
+}
+
 // function 06005060
 void printfWrapper(int x,int y, unsigned int flag,char *msg)
 {
@@ -238,7 +309,7 @@ void printfWrapper(int x,int y, unsigned int flag,char *msg)
   do {
     tempX = x + i;
     i = i + 1;
-    //printfWrapper2(tempX, y, flag & 0xff, msg[i-1]);
+    printfWrapper2(tempX, y, flag & 0xff, msg[i-1]);
   } while (msg[i] != '\0');
   return;
 }
@@ -405,29 +476,6 @@ void readSMPC(unsigned int unused, unsigned short* outData)
     return;
 }
 
-// function 0x6004100
-unsigned int writeTOVDP2VRAM(int x, int y, unsigned flags)
-{
-    unsigned int temp1;
-    unsigned int temp2;
-
-
-    unsigned char* vramByte = (unsigned char*)VDP2_VRAM_START + (x >> 1 | y * 0x200);
-
-    if((x & 1) != 0)
-    {
-        temp1 = (int)((char)(*vramByte & 0xf0) | (flags & 0xf));
-        *vramByte = (unsigned char)temp1;
-        return temp1;
-    }
-
-    temp2 = ((flags & 0xff)) << 4 & 0xf0;
-    temp1 = (int)((char)(*vramByte & 0xf));
-    *vramByte = (unsigned char)temp1 | (unsigned char)temp2;
-
-    return temp1 | temp2;
-}
-
 void printfWrapper5(int x, int y, int count, unsigned int flags)
 {
     // BUGBUG: not impl
@@ -446,7 +494,7 @@ void printfWrapper6(int x, int y, int count, unsigned int flags)
 
     do {
         i = x + 1;
-        writeTOVDP2VRAM(x, y, flags & 0xff);
+        writeToVDP2VRAM(x, y, flags & 0xff);
         x = i;
     } while (i != count);
 
@@ -805,7 +853,7 @@ void jo_main(void)
 
     initVDP2();
     copyDataToVDP2CRAMCache();
-    initSMPC(); // not implemented
+    initSMPC();
 
     initVDP1();
     printfWrapper(2, 1, 0x0f, "BG0123");
@@ -846,7 +894,7 @@ void jo_main(void)
         // set some global to 0??
 
         setVDP1VRAM_4(0x9f, 0, 0x9f, 0x6f, 0, 0x6f, 0, 0, 0xfc1f);
-        setVDP1VRAM_5();
+        setSomethingVDP1VRAMCache();
 
         pollVDP2_D0W_8();
         pollVDP2_D0W_8_2();
@@ -856,4 +904,9 @@ void jo_main(void)
         readSMPC(0, smpcData);
 
     }
+
+    // these functions aren't called until the user hits start so I don't think they are necessary to RE
+    // 0x06005570
+    // 0x06004e50
+    // 0x60052a0
 }
