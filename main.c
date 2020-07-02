@@ -27,6 +27,7 @@
 */
 
 #include <jo/jo.h>
+#include "vdp2_regs.h"
 #include "vdp2_cram_data.h"
 
 typedef struct _RESOLUTIONS {
@@ -76,27 +77,6 @@ RESOLUTIONS g_Resolutions[] = {
 void* memcpy(void *dst, const void *src, unsigned int len);
 void *memset(void *s, int c, unsigned int n);
 
-volatile unsigned short* VDP2_D0R = (unsigned short*)0x25F80000;
-volatile unsigned short* VDP2_D0W = (unsigned short*)0x25F80004;
-volatile unsigned short* VDP2_D1R = (unsigned short*)0x25f80020;
-volatile unsigned short* VDP2_D1C = (unsigned short*)0x25f80028;
-volatile unsigned short* VDP2_D1AD = (unsigned short*)0x25f8002C;
-
-volatile unsigned short* VDP2_D1EN = (unsigned short*)0x25f80030;
-volatile unsigned short* VDP2_D1MD = (unsigned short*)0x25f80034;
-volatile unsigned short* VDP2_D2R = (unsigned short*)0x25f80040;
-volatile unsigned short* VDP2_D2W = (unsigned short*)0x25f80044;
-volatile unsigned short* VDP2_D2C = (unsigned short*)0x25f80048;
-volatile unsigned short* VDP2_D2AD = (unsigned short*)0x25f8004C;
-
-volatile unsigned short* VDP2_D2EN = (unsigned short*)0x25f80050;
-volatile unsigned short* VDP2_D2MD = (unsigned short*)0x25f80054;
-volatile unsigned short* VDP2_DSTP = (unsigned short*)0x25f80060;
-
-volatile unsigned short* VDP2_PPAF = (unsigned short*)0x25f80080;
-volatile unsigned short* VDP2_PPD = (unsigned short*)0x25f80084;
-
-
 #define VDP2_VRAM_START 0x25e00000
 #define VDP2_VRAM_SIZE  0x80000
 #define VDP2_CRAM_START 0x25f00000
@@ -108,22 +88,16 @@ void initVDP2()
     //
     // set VDP2 registers
     //
-    *VDP2_D0R = 0;
+    *VDP2_TVMD = 0;
+    *VDP2_RAMCTL = *VDP2_RAMCTL & 0xCFFF;
 
-    // BUGBUG what's this VDP reg?
-    *(unsigned short*)(0x25f8000e) = *(unsigned short*)(0x25f8000e) & 0xCFFF;
+    *VDP2_MPOFN = 0;
+    *VDP2_CHCTLA = 0x1e;
 
-    // BUGBUG what's this VDP2 reg?
-    *(unsigned short*)0x25f8003c = 0;
-
-    *VDP2_D1C = 0x1e;
-
-    // BUGBUG what's this VDP2 reg?
-    *(unsigned short*)0x25f80070 = 0;
-    *(unsigned short*)0x25f80072 = 0;
-    *(unsigned short*)0x25f80074 = 0;
-
-    *VDP2_D1R = 1;
+    *VDP2_SCXIN0 = 0;
+    *VDP2_SCXDN0 = 0;
+    *VDP2_SCYIN0 = 0;
+    *VDP2_BGON = 1;
 
     //
     // zero VDP2 VRAM and CRAM cache
@@ -255,42 +229,42 @@ void printfWrapper2(int x,int y, unsigned int flag, char *msg)
 {
     unsigned int i = 0;
     int j = 0;
-    
+
     int tempX = 0;
     int tempY = 0;
-    
+
     unsigned int retVal = 0;
-    
+
     do{
-    
+
         j = 0;
         char cVar1 = 0x41; // BUGBUG: read this from VDP2???
         tempY = (y * 8) + i;
-        
+
         do {
             while(retVal = someShifter(0x0080, j), (retVal & (int)cVar1  & 0xFFU) == 0) {
                 tempX = j + (x*8);
-                
+
                 j = j + 1;
-                
+
                 writeToVDP2VRAM(tempX, tempY, flag & 0x0f);
-                
+
                 if(j == 8)
-                    goto LOOP_EXIT;  
+                    goto LOOP_EXIT;
             }
-            
+
             tempX = j + (x * 8);
             j = j + 1;
             writeToVDP2VRAM(tempX, tempY, (flag & 0xff) >> 4);
-            
+
         }while(j != 8);
 
     LOOP_EXIT:
         i = i + 1;
-        if(i == 8) {    
-            return;        
+        if(i == 8) {
+            return;
         }
-    
+
     }while(true);
 }
 
@@ -501,38 +475,19 @@ void printfWrapper6(int x, int y, int count, unsigned int flags)
     return;
 }
 
-
-volatile unsigned int* VDP2_D0EN = (void*)0x25f80010;
-volatile unsigned int* VDP2_D0MD = (void*)0x25f80014;
-volatile unsigned short* VDP2_AREF = (void*)0x25f800b8;
-volatile unsigned short* VDP2_T0C = (void*)0x25f80090;
-volatile unsigned short* VDP2_T1S = (void*)0x25f80094;
-volatile unsigned int* VDP2_IST = (void*)0x25f800a4;
-volatile unsigned int* VDP2_AIACK = (void*)0x25f800a8;
-volatile unsigned short* VDP2_T1MD = (void*)0x25f80098;
-volatile unsigned short* VDP2_DSTA = (void*)0x25f8007C;
-volatile unsigned short* VDP2_PDA = (void*)0x25f80088;
-volatile unsigned int* VDP2_IMS = (void*)0x25f800A0;
-volatile unsigned short* VDP2_ASR0 = (void*)0x25f800b0;
-volatile unsigned short* VDP2_ASR1 = (void*)0x25f800b4;
-volatile unsigned short* VDP2_D1W = (void*)0x25f80024;
-
 // function 0x060041f0
 void setVDP2Registers(int param_1)
-    {
+{
     RESOLUTIONS* currRes = &g_Resolutions[param_1];
 
-    *VDP2_D0R = 0;
-    *VDP2_D1R = 0;
+    *VDP2_TVMD = 0;
+    *VDP2_BGON = 0;
+    *VDP2_RAMCTL = 0;
 
-    // BUGBUG: what's this registers
-    *(volatile unsigned short*)0x25f8000e = 0;
-
-    *VDP2_D0EN = 0xEEEEEEEE;
-    *VDP2_D0MD = 0xEEEEEEEE;
-    *(volatile unsigned int*)0x25f80018 = 0xEEEEEEEE;
-    *(volatile unsigned int*)0x25f8001C = 0xEEEEEEEE;
-
+    *VDP2_CYCA0L = 0xEEEEEEEE;
+    *VDP2_CYCA1L = 0xEEEEEEEE;
+    *VDP2_CYCB0L = 0xEEEEEEEE;
+    *VDP2_CYCB1L = 0xEEEEEEEE;
 
     // BUGBUG: why is this size double??
     // Is it wrong here or earlier??
@@ -608,67 +563,53 @@ void setVDP2Registers(int param_1)
     printfWrapper6(0, 0, currRes->width, 0xf);
     printfWrapper6(0, currRes->height -1, currRes->width, 0xf);
 
-    *VDP2_D1R = 1;
-    *(volatile unsigned short*)0x25f8000e = 0;
-    *VDP2_D0EN = 0x45454545;
-    *VDP2_D0MD = 0x45454545;
-    *(volatile unsigned int*)0x25f80018 = 0xEEEEEEEE;
-    *(volatile unsigned int*)0x25f8001C = 0xEEEEEEEE;
-    *VDP2_D1C = 0x0e0e;
+    *VDP2_BGON = 1;
+    *VDP2_RAMCTL = 0;
+    *VDP2_CYCA0L = 0x45454545;
+    *VDP2_CYCA1L = 0x45454545;
+    *VDP2_CYCB0L = 0xEEEEEEEE;
+    *VDP2_CYCB1L = 0xEEEEEEEE;
+    *VDP2_CHCTLA = 0x0e0e;
+    *VDP2_CHCTLB = 0;
 
-    *(volatile unsigned short*)0x25f8002a = 0;
-    *VDP2_D1EN = 0;
-    *(volatile unsigned short*)0x25f80032 = 0;
-    *VDP2_D1MD = 0;
-    *(volatile unsigned short*)0x25f80036 = 0;
-    *(volatile unsigned short*)0x25f8003a = 0;
-    *(volatile unsigned short*)0x25f8003c = 0;
-    *(volatile unsigned short*)0x25f8003e = 0;
-    *VDP2_D2R = 0;
-    *(volatile unsigned short*)0x25f80042 = 0;
-    *VDP2_D2W = 0;
-    *(volatile unsigned short*)0x25f80046 = 0;
-    *VDP2_D2C = 0;
-    *(volatile unsigned short*)0x25f8004a = 0;
-    *VDP2_D2AD = 0;
-    *(volatile unsigned short*)0x25f8004e = 0;
-    *VDP2_DSTP = 0;
-    *(volatile unsigned short*)0x25f80062 = 0;
-    *(volatile unsigned short*)0x25f80064 = 0;
-    *(volatile unsigned short*)0x25f80066 = 0;
-    *(volatile unsigned short*)0x25f80068 = 0;
-    *(volatile unsigned short*)0x25f8006a = 0;
-    *(volatile unsigned short*)0x25f8006c = 0;
-    *(volatile unsigned short*)0x25f8006e = 0;
-    *VDP2_D2EN = 0;
-    *(volatile unsigned short*)0x25f80052 = 0;
-    *VDP2_D2MD = 0;
-    *(volatile unsigned short*)0x25f80056 = 0;
-    *(volatile unsigned short*)0x25f80058 = 0;
-    *(volatile unsigned short*)0x25f8005a = 0;
-    *(volatile unsigned short*)0x25f8005c = 0;
-    *(volatile unsigned short*)0x25f8005e = 0;
-    *VDP2_D1AD = 0;
-    *(volatile unsigned short*)0x25f8002e = 0;
+    *VDP2_PNCNO = 0;
+    *VDP2_PNCN1 = 0;
+    *VDP2_PNCN2 = 0;
+    *VDP2_PNCN3 = 0;
+    *VDP2_PLSZ = 0;
+    *VDP2_MPOFN = 0;
+    *VDP2_MPOFR = 0;
+    *VDP2_MPABN0 = 0;
+    *VDP2_MPCDN0 = 0;
+    *VDP2_MPABN1 = 0;
+    *VDP2_MPCDN1 = 0;
+    *VDP2_MPABN2 = 0;
+    *VDP2_MPCDN2 = 0;
+    *VDP2_MPABN3 = 0;
+    *VDP2_MPCDN3 = 0;
+    *VDP2_MPABRB = 0;
+    *VDP2_MPCDRB = 0;
+    *VDP2_MPEFRB = 0;
+    *VDP2_MPGHRB = 0;
+    *VDP2_MPIJRB = 0;
+    *VDP2_MPKLRB = 0;
+    *VDP2_MPMNRB = 0;
+    *VDP2_MPOPRB = 0;
+    *VDP2_MPABRA = 0;
+    *VDP2_MPCDRA = 0;
+    *VDP2_MPEFRA = 0;
+    *VDP2_MPGHRA = 0;
+    *VDP2_MPIJRA = 0;
+    *VDP2_MPKJRA = 0;
+    *VDP2_MPMNRA = 0;
+    *VDP2_MPOPRA = 0;
+    *VDP2_BMPNA = 0;
+    *VDP2_BMPNB = 0;
+    *VDP2_OVPNRA = 0;
+    *VDP2_OVPNRA = 0;
 
-    *VDP2_AREF = 0;
-    *(volatile unsigned short*)0x25f8002e = 0;
-    *(volatile unsigned short*)0x25f80022 = 0;
 
-    *(volatile unsigned short*)0x25f80070 = 0;
-    *(volatile unsigned short*)0x25f80072 = 0;
-    *(volatile unsigned short*)0x25f80074 = 0;
-
-    *(volatile unsigned short*)0x25f80076 = 0;
-    *VDP2_PPAF = 0;
-    *(volatile unsigned short*)0x25f80082 = 0;
-    *VDP2_PPD = 0;
-    *(volatile unsigned short*)0x25f80086 = 0;
-    *VDP2_T0C = 0;
-    *(volatile unsigned short*)0x25f80092 = 0;
-    *VDP2_T1S = 0;
-    *(volatile unsigned short*)0x25f80096 = 0;
-    *VDP2_T1MD = 0x0101;
+    *VDP2_ZMCTL = 0x0101;
     *(volatile unsigned short*)0x25f80078 = 1;
     *(volatile unsigned short*)0x25f8007a = 0;
     *VDP2_DSTA = 1;
@@ -713,7 +654,7 @@ void setVDP2Registers(int param_1)
     *(volatile unsigned short*)0x25f800d2 = 0;
     *(volatile unsigned short*)0x25f800d4 = 0;
     *(volatile unsigned short*)0x25f800d6 = 0;
-    *(volatile unsigned short*)0x25f800e0 = 0;
+    *(volatile unsigned short*)0x25f800e0 = 0x20;
 
     *(volatile unsigned short*)0x25f800f0 = 0x0101;
     *(volatile unsigned short*)0x25f800f2 = 0x0101;
@@ -755,25 +696,22 @@ void setVDP2Registers(int param_1)
     // 480p special case
     if(currRes->flags - 6 < 2)
     {
-        *VDP2_D1R = 3;
-        *(volatile unsigned short*)0x25f80078 = 2;
-        *(volatile unsigned short*)0x25f8007a = 0;
-        *VDP2_PDA = 2;
-        *(volatile unsigned short*)0x25f8008a = 0;
-        *(volatile unsigned short*)0x25f80070 = 0;
-        *(volatile unsigned short*)0x25f80072 = 0;
-        *VDP2_PPAF = 1;
-        *(volatile unsigned short*)0x25f80082 = 0;
-        *VDP2_PPD = 0;
-        *(volatile unsigned short*)0x25f80086 = 0;
+        *VDP2_BGON = 3;
+        *VDP2_ZMXIN0 = 2;
+        *VDP2_ZMXDN0 = 0;
+        *VDP2_ZMXIN1 = 2;
+        *VDP2_ZMXDN1 = 0;
+        *VDP2_SCXIN0 = 0;
+        *VDP2_SCXDN0 = 0;
+        *VDP2_SCXIN1 = 1;
+        *VDP2_SCXDN1 = 0;
+        *VDP2_SCYIN1 = 0;
+        *VDP2_SCYDN1 = 0;
     }
 
     // write data to VDP2 CRAM Cache
     // BUGBUG: this was done inlined, but reusing a fucntion I already had
     copyDataToVDP2CRAMCache();
-
-
-
 }
 
 
