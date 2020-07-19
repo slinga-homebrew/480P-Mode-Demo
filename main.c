@@ -148,11 +148,10 @@ void initVDP1()
 {
     unsigned short pattern = 0x0101;
 
-    // BUGBUG: what are these registers
-    *(volatile unsigned short*)0x25f800f0 = pattern;
-    *(volatile unsigned short*)0x25f800f2 = pattern;
-    *(volatile unsigned short*)0x25f800f4 = pattern;
-    *(volatile unsigned short*)0x25f800f6 = pattern;
+    *VDP2_PRISA = pattern;
+    *VDP2_PRISB = pattern;
+    *VDP2_PRISC = pattern;
+    *VDP2_PRISD = pattern;
 
     *VDP1_TVMR = 0;
     *VDP1_FBCR = 0;
@@ -169,7 +168,7 @@ void initVDP1()
 #define VDP1_VRAM_SIZE  0x40
 
 unsigned short g_VDP1_Global = 0;
-unsigned int g_currentIndex = 0;
+unsigned int g_currentResolutionIndex = 0;
 
 // function 0x06004aa0
 void initVDP1VRAMCache()
@@ -220,12 +219,11 @@ unsigned int writeToVDP2VRAM(int x, int y, unsigned flags)
 
 int someShifter(int x, int y)
 {
-    return x | y;
+    return x >> y;
 }
 
-
 // function 06004fb0
-void printfWrapper2(int x,int y, unsigned int flag, char *msg)
+void printfWrapper2(int x,int y, unsigned int flag, char msg)
 {
     unsigned int i = 0;
     int j = 0;
@@ -238,7 +236,7 @@ void printfWrapper2(int x,int y, unsigned int flag, char *msg)
     do{
 
         j = 0;
-        char cVar1 = 0x41; // BUGBUG: read this from VDP2???
+        char cVar1 = characterData[(msg*8) | i];
         tempY = (y * 8) + i;
 
         do {
@@ -288,33 +286,33 @@ void printfWrapper(int x,int y, unsigned int flag,char *msg)
   return;
 }
 
-// function 0x06004ef0
-int pollVDP2_D0W_8(void)
+// function 0x06004f10
+int pollVDP2_TVSTAT_8_NOT_0(void)
 {
   do {
 
-  } while ((*VDP2_D0W & 8) == 0);
+  } while ((*VDP2_TVSTAT & 8) != 0);
 
   return 0;
 }
 
 
 // function 0x06004ef0
-unsigned int pollVDP2_D0W_8_2(void)
+unsigned int pollVDP2_TVSTAT_8_0(void)
 {
     do {
 
-    } while (((int)*VDP2_D0W & 8U) == 0);
+    } while (((int)*VDP2_TVSTAT & 8U) == 0);
 
-    return (int)*VDP2_D0W & 8U;
+    return (int)*VDP2_TVSTAT & 8U;
 }
 
 // function 0x06004eb0
-unsigned int pollVDP2_D0W_4(void)
+unsigned int pollVDP2_TVSTAT_4_0(void)
 {
   do {
-  } while (((int)*VDP2_D0W  & 4U) == 0);
-  return (int)*VDP2_D0W  & 4U;
+  } while (((int)*VDP2_TVSTAT & 4U) == 0);
+  return (int)*VDP2_TVSTAT & 4U;
 }
 
 // function 0x06004b60
@@ -398,11 +396,12 @@ volatile unsigned char* SMPC_PDR1 = (void*)0x20100075;
 // function 0x060052b0
 void readSMPC(unsigned int unused, unsigned short* outData)
 {
-    *SMPC_PDR1 = 0x60;
+
     unsigned char val1, val2, val3;
     unsigned short val4;
     unsigned short val5;
 
+    *SMPC_PDR1 = 0x60;
     // BUGBUG: won't the compiler just optimize this out??
     for(int i = 0x10; i > 0; i--)
     {
@@ -436,7 +435,7 @@ void readSMPC(unsigned int unused, unsigned short* outData)
 
     }
 
-    val5 = ((*SMPC_PDR1 & 0xF) |
+    val5 = ((short)(*SMPC_PDR1 & 0xF) |
             (val3 & 0xf) << 4 |
             (val2 & 0xf) << 8 |
             ((val1 & 0x8 << 0xc))) ^ 0x8FFF;
@@ -572,7 +571,7 @@ void setVDP2Registers(int param_1)
     *VDP2_CHCTLA = 0x0e0e;
     *VDP2_CHCTLB = 0;
 
-    *VDP2_PNCNO = 0;
+    *VDP2_PNCN0 = 0;
     *VDP2_PNCN1 = 0;
     *VDP2_PNCN2 = 0;
     *VDP2_PNCN3 = 0;
@@ -600,98 +599,110 @@ void setVDP2Registers(int param_1)
     *VDP2_MPEFRA = 0;
     *VDP2_MPGHRA = 0;
     *VDP2_MPIJRA = 0;
-    *VDP2_MPKJRA = 0;
+    *VDP2_MPKLRA = 0;
     *VDP2_MPMNRA = 0;
     *VDP2_MPOPRA = 0;
     *VDP2_BMPNA = 0;
     *VDP2_BMPNB = 0;
     *VDP2_OVPNRA = 0;
-    *VDP2_OVPNRA = 0;
-
+    *VDP2_OVPNRB = 0;
+    *VDP2_MZCTL = 0;
+    *VDP2_SCXIN0 = 0;
+    *VDP2_SCXDN0 = 0;
+    *VDP2_SCYIN0 = 0;
+    *VDP2_SCYDN0 = 0;
+    *VDP2_SCXIN1 = 0;
+    *VDP2_SCXDN1 = 0;
+    *VDP2_SCYIN1 = 0;
+    *VDP2_SCYDN1 = 0;
+    *VDP2_SCXN2 = 0;
+    *VDP2_SCYN2 = 0;
+    *VDP2_SCXN3 = 0;
+    *VDP2_SCYN3 = 0;
 
     *VDP2_ZMCTL = 0x0101;
-    *(volatile unsigned short*)0x25f80078 = 1;
-    *(volatile unsigned short*)0x25f8007a = 0;
-    *VDP2_DSTA = 1;
-    *(volatile unsigned short*)0x25f8007e = 0;
-    *VDP2_PDA = 1;
-    *(volatile unsigned short*)0x25f8008a = 0;
-    *VDP2_PPD = 1;
-    *(volatile unsigned short*)0x25f8008e = 0;
-    *(volatile unsigned short*)0x25f8009a = 0;
+    *VDP2_ZMXIN0 = 1;
+    *VDP2_ZMXDN0 = 0;
+    *VDP2_ZMYIN0 = 1;
+    *VDP2_ZMYDN0 = 0;
+    *VDP2_ZMXIN1 = 1;
+    *VDP2_ZMXDN1 = 0;
+    *VDP2_ZMYIN1 = 1;
+    *VDP2_ZMYDN0 = 0;
+    *VDP2_SCRCTL = 0;
 
-    *(volatile unsigned int*)0x25f8009c = 0;
-    *VDP2_IMS = 0; // BUGBUG: unsigned int
-    *VDP2_IST = 0;// BUGBUG: unsigned int
-    *(volatile unsigned int*)0x25f800bc = 0;
-    *(volatile unsigned int*)0x25f800ac = 0;
-    *VDP2_AIACK = 0; // BUGBUG: unsigned int
-    *(volatile unsigned int*)0x25f800d8 = 0; // BUGBUG why is this done twice??
-    *(volatile unsigned int*)0x25f800d8 = 0;
-    *VDP2_IMS = 0; // BUGBUG: unsigned int
+    // longs
+    *VDP2_VCSTAU = 0;
+    *VDP2_LSTA0U = 0;
+    *VDP2_LSTA1U = 0;
+    *VDP2_RPTAU = 0;
+    *VDP2_BKTAU = 0;
+    *VDP2_LCTAU = 0;
+    *VDP2_LWTA0U = 0;
+    *VDP2_LWTA0U = 0;
+    *VDP2_LSTA0U = 0;
+    *VDP2_LSTA1U = 0;
+    *VDP2_VCSTAU = 0;
+    *VDP2_RPTAU = 0;
+    *VDP2_LCTAU = 0;
+    *VDP2_BKTAU = 0;
+    *VDP2_LWTA0U = 0;
+    *VDP2_LWTA1U = 0;
 
-    *VDP2_IST = 0; // BUGBUG: unsigned int
-    *(volatile unsigned int*)0x25f8009c = 0;
-    *(volatile unsigned int*)0x25f800bc = 0;
-    *VDP2_AIACK = 0; // BUGBUG: unsigned int
-    *(volatile unsigned int*)0x25f800ac = 0;
-    *(volatile unsigned int*)0x25f800d8 = 0;
-    *(volatile unsigned int*)0x25f800dc = 0;
+    // back to WORDs again
+    *VDP2_RPRCTL = 0;
+    *VDP2_RPMD = 0;
+    *VDP2_KTCTL = 0;
+    *VDP2_KTAOF = 0;
+    *VDP2_WPSX0 = 0;
+    *VDP2_WPSY0 = 0;
+    *VDP2_WPEX0 = 0;
+    *VDP2_WPEY0 = 0;
+    *VDP2_WPSX1 = 0;
+    *VDP2_WPSY1 = 0;
+    *VDP2_WPEX1 = 0;
+    *VDP2_WPEY1 = 0;
+    *VDP2_WCTLA = 0;
+    *VDP2_WCTLB = 0;
+    *VDP2_WCTLC = 0;
+    *VDP2_WCTLD = 0;
 
-    *(volatile unsigned short*)0x25f800b2 = 0;
-    *VDP2_ASR0 = 0;
-    *VDP2_ASR1 = 0;
-    *(volatile unsigned short*)0x25f800b6 = 0;
-    *(volatile unsigned short*)0x25f800c0 = 0;
-    *(volatile unsigned short*)0x25f800c2 = 0;
-    *(volatile unsigned short*)0x25f800c4 = 0;
-    *(volatile unsigned short*)0x25f800c6 = 0;
-    *(volatile unsigned short*)0x25f800c8 = 0;
-    *(volatile unsigned short*)0x25f800ca = 0;
-    *(volatile unsigned short*)0x25f800cc = 0;
-    *(volatile unsigned short*)0x25f800ce = 0;
-    *(volatile unsigned short*)0x25f800d0 = 0;
-    *(volatile unsigned short*)0x25f800d2 = 0;
-    *(volatile unsigned short*)0x25f800d4 = 0;
-    *(volatile unsigned short*)0x25f800d6 = 0;
-    *(volatile unsigned short*)0x25f800e0 = 0x20;
+    *VDP2_SPCTL = 0x20;
+    *VDP2_PRISA = 0x0101;
+    *VDP2_PRISB = 0x0101;
+    *VDP2_PRISC = 0x0101;
+    *VDP2_PRISD = 0x0101;
 
-    *(volatile unsigned short*)0x25f800f0 = 0x0101;
-    *(volatile unsigned short*)0x25f800f2 = 0x0101;
-    *(volatile unsigned short*)0x25f800f4 = 0x0101;
-    *(volatile unsigned short*)0x25f800f6 = 0x0101;
+    *VDP2_CCRSA = 0;
+    *VDP2_CCRSB = 0;
+    *VDP2_CCRSC = 0;
+    *VDP2_CCRSD = 0;
+    *VDP2_CRAOFA = 0;
+    *VDP2_CRAOFB = 0;
+    *VDP2_SFSEL = 0;
+    *VDP2_SFCODE = 0;
 
-    *(volatile unsigned short*)0x25f80100 = 0;
-    *(volatile unsigned short*)0x25f80102 = 0;
-    *(volatile unsigned short*)0x25f80104 = 0;
-    *(volatile unsigned short*)0x25f80106 = 0;
-    *(volatile unsigned short*)0x25f800e4 = 0;
-    *(volatile unsigned short*)0x25f800e6 = 0;
+    *VDP2_PRINA = 0x0707;
 
-    *VDP2_D1W = 0;
-    *(volatile unsigned short*)0x25f80026 = 0;
-    *(volatile unsigned short*)0x25f800f8 = 0x0707;
-
-    *(volatile unsigned short*)0x25f800fa = 0;
-    *(volatile unsigned short*)0x25f800fc = 0;
-    *(volatile unsigned short*)0x25f800ea = 0;
-    *(volatile unsigned short*)0x25f800e8 = 0;
-    *(volatile unsigned short*)0x25f800ec = 0;
-    *(volatile unsigned short*)0x25f80108 = 0;
-    *(volatile unsigned short*)0x25f8010a = 0;
-    *(volatile unsigned short*)0x25f8010c = 0;
-    *(volatile unsigned short*)0x25f8010e = 0;
-    *(volatile unsigned short*)0x25f800ee = 0;
-    *(volatile unsigned short*)0x25f80110 = 0;
-    *(volatile unsigned short*)0x25f80112 = 0;
-    *(volatile unsigned short*)0x25f80114 = 0;
-    *(volatile unsigned short*)0x25f80116 = 0;
-    *(volatile unsigned short*)0x25f80118 = 0;
-    *(volatile unsigned short*)0x25f8011a = 0;
-    *(volatile unsigned short*)0x25f8011c = 0;
-    *(volatile unsigned short*)0x25f8011e = 0;
-    *(volatile unsigned short*)0x25f800e2 = 0;
-
+    *VDP2_PRINB = 0;
+    *VDP2_PRIR = 0;
+    *VDP2_SFPRMD = 0;
+    *VDP2_LNCLEN = 0;
+    *VDP2_CCCTL = 0;
+    *VDP2_CCRNA = 0;
+    *VDP2_CCRNB = 0;
+    *VDP2_CCRR = 0;
+    *VDP2_CCRLB = 0;
+    *VDP2_SFCCMD = 0;
+    *VDP2_CLOFEN = 0;
+    *VDP2_CLOFSL = 0;
+    *VDP2_COAR = 0;
+    *VDP2_COAG = 0;
+    *VDP2_COAB = 0;
+    *VDP2_COBR = 0;
+    *VDP2_COBG = 0;
+    *VDP2_COBB = 0;
+    *VDP2_SDCTL = 0;
 
     // 480p special case
     if(currRes->flags - 6 < 2)
@@ -710,7 +721,7 @@ void setVDP2Registers(int param_1)
     }
 
     // write data to VDP2 CRAM Cache
-    // BUGBUG: this was done inlined, but reusing a fucntion I already had
+    // BUGBUG: this was done inlined, but reusing a function I already had
     copyDataToVDP2CRAMCache();
 }
 
@@ -726,10 +737,10 @@ void printMenu(int param_1)
 
     bios_set_clock_speed(currRes->flags & 1);
 
-    *VDP2_D0R = 0x8000;
+    *VDP2_TVMD = 0x8000;
 
-    pollVDP2_D0W_8_2();
-    pollVDP2_D0W_4();
+    pollVDP2_TVSTAT_8_0();
+    pollVDP2_TVSTAT_4_0();
 
     setVDP2Registers(param_1);
 
@@ -753,11 +764,11 @@ void printMenu(int param_1)
         printfWrapper(2, 4, 0x00f0, "SDTV"); // BUGBUG: this is an index into SDTV, EDTV, Hi-Vision
         printfWrapper(2, 4, 0x00f0, "Press C for the next mode.");
 
-        *VDP2_D0R = 0x8000;
-        pollVDP2_D0W_8_2();
-        pollVDP2_D0W_4();
+        *VDP2_TVMD = 0x8000;
+        pollVDP2_TVSTAT_8_0();
+        pollVDP2_TVSTAT_4_0();
 
-        *VDP2_D0R = (unsigned short)(currRes->flags | 0x8000);
+        *VDP2_TVMD = (unsigned short)(currRes->flags | 0x8000);
         return;
     }
     else // non-480 p resolutions
@@ -767,11 +778,11 @@ void printMenu(int param_1)
         printfWrapper(2, 4, 0x00f0, "SDTV"); // BUGBUG: this is an index into SDTV, EDTV, Hi-Vision
         printfWrapper(2, 4, 0x00f0, "Press C for the next mode.");
 
-        *VDP2_D0R = 0x8000;
-        pollVDP2_D0W_8_2();
-        pollVDP2_D0W_4();
+        *VDP2_TVMD = 0x8000;
+        pollVDP2_TVSTAT_8_0();
+        pollVDP2_TVSTAT_4_0();
 
-        *VDP2_D0R = (unsigned short)(currRes->flags | 0x8000);
+        *VDP2_TVMD = (unsigned short)(currRes->flags | 0x8000);
         return;
     }
 
@@ -782,7 +793,7 @@ void jo_main(void)
 {
     unsigned short smpcData[3];
 
-    //jo_core_init(JO_COLOR_Black);
+//    jo_core_init(JO_COLOR_Black);
     /*
 
     jo_core_add_callback(my_draw);
@@ -794,35 +805,68 @@ void jo_main(void)
     initSMPC();
 
     initVDP1();
-    printfWrapper(2, 1, 0x0f, "BG0123");
+    printfWrapper(2, 1, 0xF0, "BG0123");
 
-    *VDP2_D0R = 0x8000;
+    *VDP2_TVMD = 0x8000;
 
     readSMPC(0, smpcData);
 
-    g_currentIndex = 0;
+    g_currentResolutionIndex = 0;
 
-    printMenu(g_currentIndex);
+    printMenu(g_currentResolutionIndex);
 
-    pollVDP2_D0W_8();
-    pollVDP2_D0W_8_2();
+    pollVDP2_TVSTAT_8_NOT_0();
+    pollVDP2_TVSTAT_8_0();
 
     *VDP1_FBCR = 1;
     readSMPC(0, smpcData);
 
-    unsigned short someVar = 0;
-    unsigned short someVar2 = 2;
+    unsigned short SCXIN1 = 0;
+    unsigned short SCYIN1 = 0;
 
-    while(1)
+    // while controller 1 doesn't hit start
+    while(((smpcData[0] >> 0xb) & 1) == 0)
     {
         // poll controller for inputs and change globals
-        // if the user presses C, increment the resolution
         // and check if width == -1 meaning we are at the end of the array
+        if(((smpcData[2] >> 0x9) & 1) != 0)
+        {
+            // if the user presses C, increment the resolution
+            int tempResIndex = g_currentResolutionIndex + 1;
 
-        *VDP2_PPAF = someVar;
-        *VDP2_PPD = someVar2;
+            // sanity check it
+            if(g_Resolutions[tempResIndex].width == -1)
+            {
+                g_currentResolutionIndex = 0;
+                printfWrapper(2, 5, 0xF0, "wrapped resolutions");
+            }
+            else
+            {
 
-        printMenu(0);
+                g_currentResolutionIndex = tempResIndex;
+                printfWrapper(2, 5, 0xF0, "changed res");
+            }
+            printMenu(g_currentResolutionIndex);
+        }
+
+        // the decompilation also checks 4 other buttons to increment/decrement the SCXIN1/SCYINI
+        if ((smpcData[2] & 0x40) != 0) {
+            SCXIN1 = SCXIN1 - 1;
+        }
+        if ((smpcData[2] & 0x80) != 0) {
+            SCXIN1 = SCXIN1 + 1;
+        }
+        if ((smpcData[2] & 0x10) != 0) {
+            SCYIN1 = SCYIN1 - 1;
+        }
+        if ((smpcData[2] & 0x20) != 0) {
+            SCYIN1 = SCYIN1 + 1;
+        }
+
+        *VDP2_SCXIN1 = SCXIN1;
+        *VDP2_SCYIN1 = SCYIN1;
+
+        //printMenu(0);
 
         initVDP1VRAMCache();
         setVDP1VRAM(0xA0, 0x70);
@@ -834,8 +878,8 @@ void jo_main(void)
         setVDP1VRAM_4(0x9f, 0, 0x9f, 0x6f, 0, 0x6f, 0, 0, 0xfc1f);
         setSomethingVDP1VRAMCache();
 
-        pollVDP2_D0W_8();
-        pollVDP2_D0W_8_2();
+        pollVDP2_TVSTAT_8_NOT_0();
+        pollVDP2_TVSTAT_8_0();
 
         *VDP1_FBCR = 1;
 
