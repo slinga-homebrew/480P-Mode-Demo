@@ -1,3 +1,6 @@
+// This is a decompilation attempt of Charles MacDonald's 480p Mode Demo
+// The original ISO is available here: https://segaxtreme.net/threads/progressive-hires-test-demo.15539/
+
 /*
 ** Jo Sega Saturn Engine
 ** Copyright (c) 2012-2017, Johannes Fetz (johannesfetz@gmail.com)
@@ -29,6 +32,8 @@
 #include <jo/jo.h>
 #include "vdp2_regs.h"
 #include "vdp2_cram_data.h"
+
+#define UNUSED(x) (void)(x)
 
 typedef struct _RESOLUTIONS {
     unsigned int width;
@@ -97,8 +102,29 @@ RESOLUTIONS g_Resolutions[] = {
 };
 
 // stdlib function prototypes to keep compiler happy
-void* memcpy(void *dst, const void *src, unsigned int len);
-void *memset(void *s, int c, unsigned int n);
+//void* memcpy(void *dst, const void *src, unsigned int len);
+//void *memset(void *s, int c, unsigned int n);
+
+// access to VRAM must be 2 byte aligned
+// caller must make sure len is 2 byte aligned
+void __attribute__ ((noinline)) jo_memcpy(volatile unsigned short* dst, const unsigned short* src, unsigned int len)
+{
+    for(unsigned int i = 0; i < len; i += 2)
+    {
+        dst[i/2] = src[i/2];
+    }
+}
+
+// access to VRAM must be 2 byte aligned
+// caller must make sure len is 2 byte aligned
+void __attribute__ ((noinline)) my_memset(volatile unsigned short* s, int c, unsigned int n)
+{
+    for(unsigned int i = 0; i < n; i += 2)
+    {
+        s[i/2] = (unsigned short)c;
+    }
+}
+
 
 #define VDP2_VRAM_START 0x25e00000
 #define VDP2_VRAM_SIZE  0x80000
@@ -106,7 +132,7 @@ void *memset(void *s, int c, unsigned int n);
 #define VDP2_CRAM_SIZE  0x1000
 
 // function 0x06004dd0
-void initVDP2()
+void __attribute__ ((noinline)) initVDP2()
 {
     //
     // set VDP2 registers
@@ -125,14 +151,14 @@ void initVDP2()
     //
     // zero VDP2 VRAM and CRAM cache
     //
-    memset((void*)VDP2_VRAM_START, 0, VDP2_VRAM_SIZE);
-    memset((void*)VDP2_CRAM_START, 0, VDP2_CRAM_SIZE);
+    jo_memset((void*)VDP2_VRAM_START, 0, VDP2_VRAM_SIZE);
+    jo_memset((void*)VDP2_CRAM_START, 0, VDP2_CRAM_SIZE);
 }
 
 // function 0x06004f70
-void copyDataToVDP2CRAMCache()
+void __attribute__ ((noinline)) copyDataToVDP2CRAMCache()
 {
-    memcpy((void*)VDP2_CRAM_START, (void*)CRAM_DATA, sizeof(CRAM_DATA));
+    jo_memcpy((void*)VDP2_CRAM_START, (void*)CRAM_DATA, sizeof(CRAM_DATA));
 
     // BUGBUG:
     // set a pointer in the start of CRAM???
@@ -147,7 +173,7 @@ volatile unsigned char* SMPC_IOSEL1 = (void*)0x2010007d;
 volatile unsigned char* SMPC_EXLE1 = (void*)0x2010007f;
 
 // function 0x06005280
-void initSMPC()
+void __attribute__ ((noinline)) initSMPC()
 {
     *SMPC_DDR1 = 0x60;
     *SMPC_DDR2 = 0x60;
@@ -167,7 +193,7 @@ void initVDP1VRAMCache();
 void setSomethingVDP1VRAMCache();
 
 // function 0x06004b00
-void initVDP1()
+void __attribute__ ((noinline)) initVDP1()
 {
     unsigned short pattern = 0x0101;
 
@@ -194,9 +220,9 @@ unsigned short g_VDP1_Global = 0;
 unsigned int g_currentResolutionIndex = 0;
 
 // function 0x06004aa0
-void initVDP1VRAMCache()
+void __attribute__ ((noinline)) initVDP1VRAMCache()
 {
-    memset((void*)VDP1_VRAM_START, 0xFF, VDP1_VRAM_SIZE);
+    jo_memset((void*)VDP1_VRAM_START, 0xFF, VDP1_VRAM_SIZE);
 
     *(unsigned short*)VDP1_VRAM_START = 0x4000;
 
@@ -205,14 +231,14 @@ void initVDP1VRAMCache()
 }
 
 // function 06004ad0
-void setSomethingVDP1VRAMCache()
+void __attribute__ ((noinline)) setSomethingVDP1VRAMCache()
 {
     *(unsigned short*)((unsigned char*)(VDP1_VRAM_START) + (g_VDP1_Global & 0xffff) * 20) = 0x8000;
     g_VDP1_Global++;
 }
 
 // function 0x6004100
-unsigned int writeToVDP2VRAM(int x, int y, unsigned flags)
+unsigned int  __attribute__ ((noinline)) writeToVDP2VRAM(int x, int y, unsigned flags)
 {
     unsigned int temp1;
     unsigned int temp2;
@@ -234,13 +260,13 @@ unsigned int writeToVDP2VRAM(int x, int y, unsigned flags)
     return temp1 | temp2;
 }
 
-int someShifter(int x, int y)
+int  __attribute__ ((noinline)) someShifter(int x, int y)
 {
     return x >> y;
 }
 
 // function 06004fb0
-void drawCharacter(int x,int y, unsigned int flag, char msg)
+void  __attribute__ ((noinline)) drawCharacter(int x,int y, unsigned int flag, char msg)
 {
     unsigned int i = 0;
     int j = 0;
@@ -284,7 +310,7 @@ void drawCharacter(int x,int y, unsigned int flag, char msg)
 }
 
 // function 06005060
-void drawString(int x,int y, unsigned int flag,char *msg)
+void  __attribute__ ((noinline)) drawString(int x,int y, unsigned int flag, const char *msg)
 {
   int tempX;
   int i;
@@ -304,7 +330,7 @@ void drawString(int x,int y, unsigned int flag,char *msg)
 }
 
 // function 0x06004f10
-int pollVDP2_TVSTAT_8_NOT_0(void)
+int  __attribute__ ((noinline)) pollVDP2_TVSTAT_8_NOT_0(void)
 {
   do {
 
@@ -313,9 +339,8 @@ int pollVDP2_TVSTAT_8_NOT_0(void)
   return 0;
 }
 
-
 // function 0x06004ef0
-unsigned int pollVDP2_TVSTAT_8_0(void)
+unsigned int  __attribute__ ((noinline)) pollVDP2_TVSTAT_8_0(void)
 {
     do {
 
@@ -325,7 +350,7 @@ unsigned int pollVDP2_TVSTAT_8_0(void)
 }
 
 // function 0x06004eb0
-unsigned int pollVDP2_TVSTAT_4_0(void)
+unsigned int  __attribute__ ((noinline)) pollVDP2_TVSTAT_4_0(void)
 {
   do {
   } while (((int)*VDP2_TVSTAT & 4U) == 0);
@@ -333,9 +358,9 @@ unsigned int pollVDP2_TVSTAT_4_0(void)
 }
 
 // function 0x06004b60
-void setVDP1VRAM(unsigned short a, unsigned short b)
+void  __attribute__ ((noinline)) setVDP1VRAM(unsigned short a, unsigned short b)
 {
-    unsigned short* vdp1_vram = ((unsigned char*)VDP1_VRAM_START + (g_VDP1_Global & 0xFFFF)*0x20);
+    volatile unsigned short* vdp1_vram = (volatile unsigned short*)((unsigned char*)VDP1_VRAM_START + (g_VDP1_Global & 0xFFFF)*0x20);
 
     vdp1_vram[0] = 9;
     vdp1_vram[1] = 0;
@@ -346,9 +371,9 @@ void setVDP1VRAM(unsigned short a, unsigned short b)
 }
 
 // function 0x06004ba0
-void setVDP1VRAM_2(unsigned short a, unsigned short b, unsigned short c, unsigned short d)
+void  __attribute__ ((noinline)) setVDP1VRAM_2(unsigned short a, unsigned short b, unsigned short c, unsigned short d)
 {
-    unsigned short* vdp1_vram = ((unsigned char*)VDP1_VRAM_START + (g_VDP1_Global & 0xFFFF)*0x20);
+    volatile unsigned short* vdp1_vram = (volatile unsigned short*)((unsigned char*)VDP1_VRAM_START + (g_VDP1_Global & 0xFFFF)*0x20);
 
     vdp1_vram[0] = 8;
     vdp1_vram[1] = 0;
@@ -361,9 +386,9 @@ void setVDP1VRAM_2(unsigned short a, unsigned short b, unsigned short c, unsigne
 }
 
 // function 0x06004be0
-void setVDP1VRAM_3(unsigned short a, unsigned short b)
+void  __attribute__ ((noinline)) setVDP1VRAM_3(unsigned short a, unsigned short b)
 {
-    unsigned short* vdp1_vram = ((unsigned char*)VDP1_VRAM_START + (g_VDP1_Global & 0xFFFF)*0x20);
+    volatile unsigned short* vdp1_vram = (unsigned short*)((unsigned char*)VDP1_VRAM_START + (g_VDP1_Global & 0xFFFF)*0x20);
 
     vdp1_vram[0] = 10;
     vdp1_vram[1] = 0;
@@ -374,9 +399,9 @@ void setVDP1VRAM_3(unsigned short a, unsigned short b)
 }
 
 // function 0x06004c20
-void setVDP1VRAM_4(unsigned short param_1,unsigned short param_2,unsigned short param_3,unsigned short param_4,unsigned short param_5, unsigned short param_6,unsigned short param_7,unsigned short param_8,unsigned short param_9)
+void  __attribute__ ((noinline))  setVDP1VRAM_4(unsigned short param_1,unsigned short param_2,unsigned short param_3,unsigned short param_4,unsigned short param_5, unsigned short param_6,unsigned short param_7,unsigned short param_8,unsigned short param_9)
 {
-    unsigned short* vdp1_vram = (VDP1_VRAM_START + (g_VDP1_Global & 0xFFFF)*0x20);
+    volatile unsigned short* vdp1_vram = (volatile unsigned short*)(VDP1_VRAM_START + (g_VDP1_Global & 0xFFFF)*0x20);
 
     vdp1_vram[1] = 5;
 
@@ -399,9 +424,9 @@ void setVDP1VRAM_4(unsigned short param_1,unsigned short param_2,unsigned short 
 }
 
 // function 0x06004ad0
-void setVDP1VRAM_5()
+void  __attribute__ ((noinline)) setVDP1VRAM_5()
 {
-    unsigned short* vdp1_vram = (VDP1_VRAM_START + (g_VDP1_Global & 0xFFFF)*0x20);
+    volatile unsigned short* vdp1_vram = (volatile unsigned short*)(VDP1_VRAM_START + (g_VDP1_Global & 0xFFFF)*0x20);
 
     vdp1_vram[0] = 0x8000;
 
@@ -411,12 +436,13 @@ void setVDP1VRAM_5()
 volatile unsigned char* SMPC_PDR1 = (void*)0x20100075;
 
 // function 0x060052b0
-void readSMPC(unsigned int unused, unsigned short* outData)
+void  __attribute__ ((noinline)) readSMPC(unsigned int unused, unsigned short* outData)
 {
-
     unsigned char val1, val2, val3;
     unsigned short val4;
     unsigned short val5;
+    
+    UNUSED(unused);
 
     *SMPC_PDR1 = 0x60;
     // BUGBUG: won't the compiler just optimize this out??
@@ -466,7 +492,8 @@ void readSMPC(unsigned int unused, unsigned short* outData)
     return;
 }
 
-void drawVerticalLines(int x, int y, int count, unsigned int flags)
+// function 0x6004150
+void  __attribute__ ((noinline)) drawVerticalLines(int x, int y, int count, unsigned int flags)
 {
     int i = 0;
 
@@ -484,7 +511,7 @@ void drawVerticalLines(int x, int y, int count, unsigned int flags)
 }
 
 // function 0x60041a0
-void drawHorizontalLines(int x, int y, int count, unsigned int flags)
+void  __attribute__ ((noinline)) drawHorizontalLines(int x, int y, int count, unsigned int flags)
 {
     int i = 0;
 
@@ -502,7 +529,7 @@ void drawHorizontalLines(int x, int y, int count, unsigned int flags)
 }
 
 // function 0x060041f0
-void setVDP2Registers(int param_1)
+void __attribute__ ((noinline)) setVDP2Registers(int param_1)
 {
     RESOLUTIONS* currRes = &g_Resolutions[param_1];
 
@@ -517,7 +544,7 @@ void setVDP2Registers(int param_1)
 
     // BUGBUG: why is this size double??
     // Is it wrong here or earlier??
-    memset((void*)VDP2_VRAM_START, 0, 512*1024);
+    jo_memset((void*)VDP2_VRAM_START, 0, 512*1024);
 
     int tempHeight = currRes->height;
 
@@ -757,7 +784,7 @@ typedef void (*bios_set_clock_speed_FP)(unsigned int);
 bios_set_clock_speed_FP bios_set_clock_speed = (bios_set_clock_speed_FP)(0x320);
 
 // function 0x060046b0
-void printMenu(int index)
+void  __attribute__ ((noinline)) printMenu(int index)
 {
     char buffer[16] = {0};
 
@@ -824,9 +851,12 @@ void printMenu(int index)
     return;
 }
 
-void jo_main(void)
+void   __attribute__ ((noinline)) jo_main(void)
 {
     unsigned short smpcData[3] = {0};
+
+    // bugbug remove this
+	//jo_core_init(JO_COLOR_Blue);
 
     // initialized VDP1 and VDP2
     initVDP2();
@@ -866,7 +896,7 @@ void jo_main(void)
             int tempResIndex = g_currentResolutionIndex + 1;
 
             // sanity check it
-            if(g_Resolutions[tempResIndex].width == -1)
+            if(g_Resolutions[tempResIndex].width == 0xFFFFFFFF)
             {
                 g_currentResolutionIndex = 0;
             }
