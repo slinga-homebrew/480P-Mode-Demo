@@ -36,9 +36,32 @@ typedef struct _RESOLUTIONS {
     unsigned int flags;
 
     // flag is really a union:
-    // - lowest bit is passed to bios_set_clock_speed()
+    // - bit 0 is passed to bios_set_clock_speed() to run at a faster clock speed
+    // - bit 2 is 480p progressive flag
+    // - bits 0-2 are combined again as an index into tvModes
+    // - bits 6-7 are an index into interlaceModes
 
 } RESOLUTIONS, *PRESOLUTIONS;
+
+const char* tvModes[] =
+{
+    "SDTV",
+    "SDTV",
+    "SDTV",
+    "SDTV",
+    "EDTV (VGA), progressive scan",
+    "Hi-Vision, progessive scan",
+    "EDTV (VGA), progressive scan",
+    "Hi-Vision, progessive scan"
+};
+
+const char* interlaceModes[] =
+{
+    "Non-interlaced",
+    "---", // not used??
+    "Single-density interlaced",
+    "Double density interlaced"
+};
 
 // global array at 0x060057a4
 RESOLUTIONS g_Resolutions[] = {
@@ -188,12 +211,6 @@ void setSomethingVDP1VRAMCache()
     g_VDP1_Global++;
 }
 
-void my_draw(void)
-{
-    jo_printf(2, 2, "test");
-    jo_printf(2, 2, "hello world");
-}
-
 // function 0x6004100
 unsigned int writeToVDP2VRAM(int x, int y, unsigned flags)
 {
@@ -223,7 +240,7 @@ int someShifter(int x, int y)
 }
 
 // function 06004fb0
-void printfWrapper2(int x,int y, unsigned int flag, char msg)
+void drawCharacter(int x,int y, unsigned int flag, char msg)
 {
     unsigned int i = 0;
     int j = 0;
@@ -267,7 +284,7 @@ void printfWrapper2(int x,int y, unsigned int flag, char msg)
 }
 
 // function 06005060
-void printfWrapper(int x,int y, unsigned int flag,char *msg)
+void drawString(int x,int y, unsigned int flag,char *msg)
 {
   int tempX;
   int i;
@@ -281,7 +298,7 @@ void printfWrapper(int x,int y, unsigned int flag,char *msg)
   do {
     tempX = x + i;
     i = i + 1;
-    printfWrapper2(tempX, y, flag & 0xff, msg[i-1]);
+    drawCharacter(tempX, y, flag & 0xff, msg[i-1]);
   } while (msg[i] != '\0');
   return;
 }
@@ -449,15 +466,25 @@ void readSMPC(unsigned int unused, unsigned short* outData)
     return;
 }
 
-void printfWrapper5(int x, int y, int count, unsigned int flags)
+void drawVerticalLines(int x, int y, int count, unsigned int flags)
 {
-    // BUGBUG: not impl
-    return;
+    int i = 0;
 
+    if (count <= y) {
+        return;
+    }
+
+    do {
+        i = y + 1;
+        writeToVDP2VRAM(x, y, flags & 0xff);
+        y = i;
+    } while (i != count);
+
+    return;
 }
 
 // function 0x60041a0
-void printfWrapper6(int x, int y, int count, unsigned int flags)
+void drawHorizontalLines(int x, int y, int count, unsigned int flags)
 {
     int i = 0;
 
@@ -513,7 +540,7 @@ void setVDP2Registers(int param_1)
 
         do{
 
-            printfWrapper6(0, k, currRes->width - 1, 7);
+            drawHorizontalLines(0, k, currRes->width - 1, 7);
             tempHeight = currRes->height;
 
             j = j + 1;
@@ -538,7 +565,7 @@ void setVDP2Registers(int param_1)
         int j = 0;
         while(true)
         {
-            printfWrapper5(j << 4, 0, currRes->height - 1, 7);
+            drawVerticalLines(j << 4, 0, currRes->height - 1, 7);
             int tempWidth = currRes->width;
 
             j++;
@@ -557,10 +584,10 @@ void setVDP2Registers(int param_1)
         tempHeight = currRes->height;
     }
 
-    printfWrapper5(0, 0, currRes->height, 0xf);
-    printfWrapper5(currRes->width - 1, 0, currRes->height, 0xf);
-    printfWrapper6(0, 0, currRes->width, 0xf);
-    printfWrapper6(0, currRes->height -1, currRes->width, 0xf);
+    drawVerticalLines(0, 0, currRes->height, 0xf);
+    drawVerticalLines(currRes->width - 1, 0, currRes->height, 0xf);
+    drawHorizontalLines(0, 0, currRes->width, 0xf);
+    drawHorizontalLines(0, currRes->height -1, currRes->width, 0xf);
 
     *VDP2_BGON = 1;
     *VDP2_RAMCTL = 0;
@@ -725,15 +752,16 @@ void setVDP2Registers(int param_1)
     copyDataToVDP2CRAMCache();
 }
 
-
 // bios_set_clock_speed is at 0x320
 typedef void (*bios_set_clock_speed_FP)(unsigned int);
 bios_set_clock_speed_FP bios_set_clock_speed = (bios_set_clock_speed_FP)(0x320);
 
 // function 0x060046b0
-void printMenu(int param_1)
+void printMenu(int index)
 {
-    RESOLUTIONS* currRes = &g_Resolutions[param_1];
+    char buffer[16] = {0};
+
+    RESOLUTIONS* currRes = &g_Resolutions[index];
 
     bios_set_clock_speed(currRes->flags & 1);
 
@@ -742,27 +770,30 @@ void printMenu(int param_1)
     pollVDP2_TVSTAT_8_0();
     pollVDP2_TVSTAT_4_0();
 
-    setVDP2Registers(param_1);
+    setVDP2Registers(index);
 
     int flags = currRes->flags;
 
-    int someField = (flags >> 6) & 3;
+    int interlaceModeIndex = (flags >> 6) & 3;
 
-    printfWrapper(2, 2, 0x00f0, "---x---");
+    drawString(2, 2, 0x00f0, "---x---");
 
-    int someField2 = (flags & 7) * 4;
+    int tvModeIndex = (flags & 7);
 
     // print width of the string
-    printfWrapper(2, 2, 0x00f0, "320"); // BUGBUG: this is an index into something that prints out the widths
+    sprintf(buffer, "%d", currRes->width);
+    drawString(2, 2, 0x00f0, buffer);
 
     // 480p resolutions
     if((flags & 0x4) != 0)
     {
-        printfWrapper(6, 2, 0x00f0, "480");
-        printfWrapper(2, 3, 0x00f0, "non-interlaced"); // BUGBUG: this is an index into something that prints out
+        sprintf(buffer, "%d", currRes->height);
+        drawString(6, 2, 0x00f0, buffer);
+        drawString(2, 3, 0x00f0, interlaceModes[interlaceModeIndex]);
+        drawString(2, 4, 0x00f0, tvModes[tvModeIndex]);
+        drawString(2, 6, 0x00f0, "Press C for the next mode.");
 
-        printfWrapper(2, 4, 0x00f0, "SDTV"); // BUGBUG: this is an index into SDTV, EDTV, Hi-Vision
-        printfWrapper(2, 4, 0x00f0, "Press C for the next mode.");
+        drawString(2, 7, 0x00f0, "Original code by Charles MacDonald. Decompiled by Slinga.");
 
         *VDP2_TVMD = 0x8000;
         pollVDP2_TVSTAT_8_0();
@@ -773,10 +804,14 @@ void printMenu(int param_1)
     }
     else // non-480 p resolutions
     {
-        printfWrapper(6, 2, 0x00f0, "240"); // BUGBUG: this is an index into a list of resolution strings
-        printfWrapper(2, 3, 0x00f0, "non-interlaced"); // BUGBUG: this is an index into something that prints out
-        printfWrapper(2, 4, 0x00f0, "SDTV"); // BUGBUG: this is an index into SDTV, EDTV, Hi-Vision
-        printfWrapper(2, 4, 0x00f0, "Press C for the next mode.");
+        sprintf(buffer, "%d", currRes->height);
+        drawString(6, 2, 0x00f0, buffer);
+        drawString(2, 3, 0x00f0, interlaceModes[interlaceModeIndex]);
+        drawString(2, 4, 0x00f0, tvModes[tvModeIndex]);
+        drawString(2, 6, 0x00f0, "Press C for the next mode.");
+
+        drawString(2, 8, 0x00f0, "Original code by Charles MacDonald");
+        drawString(2, 9, 0x00f0, "Decompiled by Slinga");
 
         *VDP2_TVMD = 0x8000;
         pollVDP2_TVSTAT_8_0();
@@ -791,21 +826,17 @@ void printMenu(int param_1)
 
 void jo_main(void)
 {
-    unsigned short smpcData[3];
+    unsigned short smpcData[3] = {0};
 
-//    jo_core_init(JO_COLOR_Black);
-    /*
-
-    jo_core_add_callback(my_draw);
-    jo_core_run();
-    */
-
+    // initialized VDP1 and VDP2
     initVDP2();
     copyDataToVDP2CRAMCache();
     initSMPC();
-
     initVDP1();
-    printfWrapper(2, 1, 0xF0, "BG0123");
+
+    // this is in the disassembly but doesn't actually display anything
+    // because it's not in the loop before
+    // drawString(2, 4, 0xF0, "BG0123");
 
     *VDP2_TVMD = 0x8000;
 
@@ -838,13 +869,10 @@ void jo_main(void)
             if(g_Resolutions[tempResIndex].width == -1)
             {
                 g_currentResolutionIndex = 0;
-                printfWrapper(2, 5, 0xF0, "wrapped resolutions");
             }
             else
             {
-
                 g_currentResolutionIndex = tempResIndex;
-                printfWrapper(2, 5, 0xF0, "changed res");
             }
             printMenu(g_currentResolutionIndex);
         }
