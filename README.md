@@ -11,4 +11,5 @@ The decompiled code appears to work the same as the original binary on Mednafen 
 ## Credits
 * Charles MacDonald for the original program and for answering questions
 * Steve Kwok for explaining 480P settings
-* [Segaxtreme](http://www.segaxtreme.net/) forums - best place for Sega Saturn dev questions
+* [SegaXtreme](http://www.segaxtreme.net/) forums - best place for Sega Saturn dev questions
+* [libyaul](https://github.com/ijacquez/libyaul) - bios_clock_speed_chg() function and VDP2 register definitions
