@@ -808,7 +808,6 @@ void __attribute__ ((noinline)) changeResolution(int index)
     RESOLUTIONS* currRes = &g_Resolutions[index];
 
     bios_clock_speed_chg(currRes->flags & 1);
-    bios_clock_speed_chg(currRes->flags & 1);
 
     *VDP2_TVMD = 0x8000;
 
