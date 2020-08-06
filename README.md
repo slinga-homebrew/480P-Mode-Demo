@@ -8,7 +8,8 @@ Build the code with joengine or grab an ISO from [releases](https://github.com/s
 ## Compatibility
 The decompiled code appears to work the same as the original binary on Mednafen and on real hardware.
 * Mednafen seems to have issues with 480P modes. This doesn't happen on real hardware.
-* Real hardware requires the use of SCART cables for the 480P modes. I have only tested using SCART -> OSSC -> HDMI and the 480P modes appear to work. Once my HD Retrovision cables arrive I will repeat the test Component -> OSSC and Component -> direct TV to see if they will also work. 
+* Real hardware requires the use of SCART cables for the 480P modes. I have only tested using SCART -> OSSC -> HDMI and the 480P modes appear to work.
+* HD Retrovision cables work on 320x480 and 640x480 EDTV VGA 480P modes. Neither Hi-Vision mode worked. I tested Component -> OSSC -> HDMI and Component -> direct TV and the results were identical for the 480P resolutions. 
 
 ## Credits
 * Charles MacDonald for the original program and for answering questions
